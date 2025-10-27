@@ -26,7 +26,7 @@ def main():
     parser.add_argument('--content-weight', type=float, default=None, help='Weight for content similarity (default: 1 - svd_weight)')
     parser.add_argument('--normalize-sim', action='store_true', help='Normalize cosine similarity to rating scale [1,5] before mixing')
     parser.add_argument('--learn-sim', action='store_true', help='Learn a linear mapping from cosine similarity -> rating using train data')
-    parser.add_argument('--users', nargs='+', default=['1', '50', '100'], help='User IDs to generate recommendations for')
+    parser.add_argument('--users', nargs='+', default=['2', '10', '30'], help='User IDs to generate recommendations for')
     parser.add_argument('--topn', type=int, default=5, help='Top-N recommendations per user')
     parser.add_argument('--data-dir', default='ml-100k', help='Path to MovieLens data directory')
     parser.add_argument('--no-eval', dest='evaluate', action='store_false', help='Disable evaluation (evaluation runs by default)')
