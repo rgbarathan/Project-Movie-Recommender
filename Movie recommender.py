@@ -54,13 +54,16 @@ def main():
     parser.add_argument('--recs-show-confidence', action='store_true', help='Show confidence hint for each recommendation (e.g., [####-] 4.2)')
     parser.add_argument('--badges-demographics', action='store_true', help='Print compact demographic badges like [25-34] [M] [programmer] (default: enabled)')
     parser.add_argument('--show-per-dim-top-genres', action='store_true', help='Also print per-dimension (age, gender, occupation) top genre lines')
-    parser.add_argument('--show-matched-genres', action='store_true', help='Always compute and display Matched Genres even when boost is disabled')
+    parser.add_argument('--show-matched-genres', action='store_true', help='Always compute and display Matched Genres even when boost is disabled (default: enabled)')
+    parser.add_argument('--no-show-matched-genres', dest='show_matched_genres', action='store_false', help='Disable Matched Genres display and computation')
     # Top-N control
     parser.add_argument('--only-top3', action='store_true', help='Force Top-N to 3 regardless of other flags')
     # Enable table view by default; can be turned off with --no-recs-table
     parser.set_defaults(recs_table=True)
     # Make concise demographic badges the default
     parser.set_defaults(badges_demographics=True)
+    # Enable matched genres by default
+    parser.set_defaults(show_matched_genres=True)
     args = parser.parse_args()
     if getattr(args, 'only_top3', False):
         args.topn = 3
