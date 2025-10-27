@@ -54,6 +54,7 @@ def main():
     parser.add_argument('--recs-show-confidence', action='store_true', help='Show confidence hint for each recommendation (e.g., [####-] 4.2)')
     parser.add_argument('--badges-demographics', action='store_true', help='Print compact demographic badges like [25-34] [M] [programmer] (default: enabled)')
     parser.add_argument('--show-per-dim-top-genres', action='store_true', help='Also print per-dimension (age, gender, occupation) top genre lines')
+    parser.add_argument('--show-matched-genres', action='store_true', help='Always compute and display Matched Genres even when boost is disabled')
     # Top-N control
     parser.add_argument('--only-top3', action='store_true', help='Force Top-N to 3 regardless of other flags')
     # Enable table view by default; can be turned off with --no-recs-table
@@ -294,10 +295,12 @@ def main():
                     cat_sims = sim_regressor.predict(cat_sims.reshape(-1, 1))
                     cat_sims = np.clip(cat_sims, 1.0, 5.0)
 
-        # Optional top-genre boost from categories
+        # Optional top-genre selection and boost
         genre_boosts = np.zeros(len(unseen_movies))
         selected_genres = []
-        if cat_genre_boost > 0 and (combined_top_genre_idxs or per_dim_top_idxs):
+        # Determine whether to compute selected genres (for matched display or boost)
+        need_selected = getattr(args, 'show_matched_genres', False) or (cat_genre_boost > 0)
+        if need_selected and (combined_top_genre_idxs or per_dim_top_idxs):
             # Select genre indices to consider
             if cat_mode == 'union' and per_dim_top_idxs:
                 selected_genres = set()
@@ -306,12 +309,10 @@ def main():
                 selected_genres = list(selected_genres)
             else:
                 selected_genres = combined_top_genre_idxs
-            if selected_genres:
-                # Build item-genre binary matrix for unseen items
+            # Compute boosts only if boost is enabled
+            if cat_genre_boost > 0 and selected_genres:
                 item_genres_mat = movie_feature_matrix.loc[unseen_movies].values  # shape (m, 19)
-                # Count matches with selected top genres
                 matches = item_genres_mat[:, selected_genres].sum(axis=1)
-                # Normalize by K (or number of selected if smaller)
                 denom = float(max(1, min(cat_topk, len(selected_genres))))
                 genre_boosts = (matches / denom) * cat_genre_boost
 
