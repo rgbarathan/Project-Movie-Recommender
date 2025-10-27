@@ -53,9 +53,13 @@ def main():
     parser.add_argument('--recs-max-genres', type=int, default=2, help='Max number of matched genres to display per item (default: 2)')
     parser.add_argument('--recs-show-confidence', action='store_true', help='Show confidence hint for each recommendation (e.g., [####-] 4.2)')
     parser.add_argument('--badges-demographics', action='store_true', help='Print compact demographic badges like [25-34] [M] [programmer]')
+    # Top-N control
+    parser.add_argument('--only-top3', action='store_true', help='Force Top-N to 3 regardless of other flags')
     # Enable table view by default; can be turned off with --no-recs-table
     parser.set_defaults(recs_table=True)
     args = parser.parse_args()
+    if getattr(args, 'only_top3', False):
+        args.topn = 3
 
     data_dir = args.data_dir
     ensure_data_files(data_dir)
