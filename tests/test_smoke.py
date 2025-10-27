@@ -10,4 +10,4 @@ def test_smoke_runs_quickly():
     out = proc.stdout.decode('utf-8', errors='replace')
     err = proc.stderr.decode('utf-8', errors='replace')
     assert proc.returncode == 0, f"Script exited non-zero. stderr:\n{err}\nstdout:\n{out}"
-    assert 'Top 1 hybrid recommendations' in out
+    assert 'Top 1 movie recommendations' in out
