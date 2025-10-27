@@ -52,11 +52,14 @@ def main():
     parser.add_argument('--recs-show-components', action='store_true', help='Include SVD/Content/Category/Boost columns in the table')
     parser.add_argument('--recs-max-genres', type=int, default=2, help='Max number of matched genres to display per item (default: 2)')
     parser.add_argument('--recs-show-confidence', action='store_true', help='Show confidence hint for each recommendation (e.g., [####-] 4.2)')
-    parser.add_argument('--badges-demographics', action='store_true', help='Print compact demographic badges like [25-34] [M] [programmer]')
+    parser.add_argument('--badges-demographics', action='store_true', help='Print compact demographic badges like [25-34] [M] [programmer] (default: enabled)')
+    parser.add_argument('--show-per-dim-top-genres', action='store_true', help='Also print per-dimension (age, gender, occupation) top genre lines')
     # Top-N control
     parser.add_argument('--only-top3', action='store_true', help='Force Top-N to 3 regardless of other flags')
     # Enable table view by default; can be turned off with --no-recs-table
     parser.set_defaults(recs_table=True)
+    # Make concise demographic badges the default
+    parser.set_defaults(badges_demographics=True)
     args = parser.parse_args()
     if getattr(args, 'only_top3', False):
         args.topn = 3
@@ -344,16 +347,13 @@ def main():
         gender = demo.get('gender', 'NA')
         occupation = demo.get('occupation', 'NA')
         if getattr(args, 'badges_demographics', False):
-            # Compact header when badges are enabled
-            print(f"\nTop {args.topn} movie recommendations for User {user}:")
-        else:
-            print(f"\nTop {args.topn} movie recommendations for User {user} (Age: {age}, Age Group: {age_group}, Gender: {gender}, Occupation: {occupation}):")
-        if getattr(args, 'badges_demographics', False):
-            # Compact badges under the header
+            # Compact header with embedded badges
             badge_age_group = age_group if age_group != 'NA' else '?'
             badge_gender = gender if gender != 'NA' else '?'
             badge_occ = occupation if occupation != 'NA' else '?'
-            print(f"  Demographics: [{badge_age_group}] [{badge_gender}] [{badge_occ}]")
+            print(f"\nTop {args.topn} movie recommendations for User {user} [{badge_age_group}|{badge_gender}|{badge_occ}]:")
+        else:
+            print(f"\nTop {args.topn} movie recommendations for User {user} (Age: {age}, Age Group: {age_group}, Gender: {gender}, Occupation: {occupation}):")
         recs = rec_pack['recs']
         comp_map = rec_pack['components']
         sel_idxs = rec_pack.get('selected_genre_idxs', []) or []
@@ -369,8 +369,9 @@ def main():
                 names = [genre_names[i] if i < len(genre_names) else f'genre_{i}' for i in idxs]
                 label = 'Age-group' if d == 'age' else ('Gender' if d == 'gender' else 'Occupation')
                 per_dim_lines.append(f"  {label} top genres: {', '.join(names)}")
-        for line in per_dim_lines:
-            print(line)
+        if getattr(args, 'show_per_dim_top_genres', False):
+            for line in per_dim_lines:
+                print(line)
         if components:
             cg_vec = np.mean(np.vstack(components), axis=0)
             idxs = np.argsort(cg_vec)[::-1][:cat_topk]
