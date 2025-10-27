@@ -25,6 +25,7 @@ Built on the **MovieLens 100k dataset** with comprehensive evaluation metrics in
 
 📊 **Comprehensive Evaluation**
 - Rating prediction: RMSE, MAE
+    - Also displayed as % of 5-star scale for quick interpretation
 - Ranking quality: Precision@K, Recall@K, NDCG@K, Hit Rate@K
 - Diversity: Item Coverage, Intra-List Diversity
 
