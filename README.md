@@ -129,7 +129,7 @@ python "Movie recommender.py"
 - `--normalize-sim`  Normalize cosine similarity to rating range [1,5]
 - `--learn-sim`      Learn linear mapping from similarity->rating using training data
 - `--users`          List of user IDs to recommend for (default `2 10 30`)
-- `--topn`           Number of recommendations per user (default 5)
+- `--topn`           Number of recommendations per user (default 3)
 - `--no-eval`        Disable evaluation
  - `--tune-svd`      Run a quick GridSearchCV over SVD hyperparameters (3-fold RMSE)
  - `--save-model`    Save the trained SVD model to `artifacts/svd_model.dump` (by default)
