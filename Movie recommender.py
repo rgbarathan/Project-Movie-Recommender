@@ -460,11 +460,7 @@ def main():
         preds = svd_model.test(testset)
         rmse = accuracy.rmse(preds, verbose=False)
         mae = accuracy.mae(preds, verbose=False)
-        # Also show as percentage of 5-star scale for readability
-        scale_max = 5.0
-        rmse_pct = (rmse / scale_max) * 100.0
-        mae_pct = (mae / scale_max) * 100.0
-        print(f"\nSVD evaluation -> RMSE: {rmse:.4f} ({rmse_pct:.2f}%), MAE: {mae:.4f} ({mae_pct:.2f}%) of 5-star scale")
+        print(f"\nSVD evaluation -> RMSE: {rmse:.4f}, MAE: {mae:.4f}")
 
         # Build ground-truth (relevant items per user) from testset using relevance threshold
         gt = defaultdict(set)
