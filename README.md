@@ -1,6 +1,6 @@
 # Movie Recommender System
 
-A **hybrid movie recommendation system** combining collaborative filtering (SVD) and content-based filtering to provide personalized movie recommendations.
+A **hybrid movie recommendation system** combining collaborative filtering (SVD), content-based filtering, and demographic-aware category profiles to provide personalized, explainable movie recommendations.
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -9,8 +9,9 @@ A **hybrid movie recommendation system** combining collaborative filtering (SVD)
 
 This project implements a hybrid recommender that combines:
 - **Collaborative Filtering:** SVD (Singular Value Decomposition) for rating prediction
-- **Content-Based Filtering:** Movie genre features and user demographics
-- **Hybrid Scoring:** Configurable weighted combination of both approaches
+- **Content-Based Filtering:** Movie genre features
+- **Demographic-Aware Category Profiles:** Age-group, gender, and occupation group profiles influence recommendations
+- **Hybrid Scoring:** Configurable weighted combination of SVD, content similarity, and category similarity, with optional top-genre boost
 
 Built on the **MovieLens 100k dataset** with comprehensive evaluation metrics including precision, recall, NDCG, hit rate, coverage, and diversity.
 
@@ -18,6 +19,7 @@ Built on the **MovieLens 100k dataset** with comprehensive evaluation metrics in
 
 ✨ **Hybrid Recommendation Approach**
 - Weighted blend of collaborative and content-based signals
+- Demographic-aware category blending (age, gender, occupation)
 - Optional learned similarity-to-rating mapping
 - Hyperparameter tuning with GridSearchCV
 
@@ -25,6 +27,12 @@ Built on the **MovieLens 100k dataset** with comprehensive evaluation metrics in
 - Rating prediction: RMSE, MAE
 - Ranking quality: Precision@K, Recall@K, NDCG@K, Hit Rate@K
 - Diversity: Item Coverage, Intra-List Diversity
+
+🧾 **Explainable, Clear Output**
+- Tabular recommendations by default with per-item component contributions (SVD, Content, Category, Boost)
+- Concise demographic badges in headers, combined top genres per user
+- Matched Genres badges per item (on by default)
+- Tabular evaluation comparing SVD vs Hybrid with Delta column
 
 🛠️ **Robust Implementation**
 - Model persistence (save/load trained models)
@@ -124,22 +132,44 @@ python "Movie recommender.py"
 ## Usage
 
 ### Command-Line Arguments
-- `--svd-weight`     Weight for SVD predictions (default 0.7)
-- `--content-weight` Weight for content similarity (default 1 - svd_weight)
-- `--normalize-sim`  Normalize cosine similarity to rating range [1,5]
-- `--learn-sim`      Learn linear mapping from similarity->rating using training data
-- `--users`          List of user IDs to recommend for (default `2 10 30`)
-- `--topn`           Number of recommendations per user (default 3)
-- `--no-eval`        Disable evaluation
- - `--tune-svd`      Run a quick GridSearchCV over SVD hyperparameters (3-fold RMSE)
- - `--save-model`    Save the trained SVD model to `artifacts/svd_model.dump` (by default)
- - `--load-model`    Load a previously saved SVD model (skips training if found)
- - `--model-dir`     Directory for model artifacts (default `artifacts`)
- - `--model-file`    Filename for the SVD model artifact (default `svd_model.dump`)
+
+Core
+- `--svd-weight`       Weight for SVD predictions (default: 0.7)
+- `--content-weight`   Weight for content similarity (default: 1 - svd_weight - category_weight)
+- `--category-weight`  Weight for demographic category similarity (default: 0.2)
+- `--category-dims`    Comma-separated list of category dimensions: `age,gender,occupation` (default: all)
+- `--normalize-sim`    Normalize cosine similarity to rating scale [1,5]
+- `--learn-sim`        Learn linear mapping from similarity→rating using training data
+- `--users`            User IDs to recommend for (default: 3 random users if omitted)
+- `--topn`             Number of recommendations per user (default: 3)
+- `--only-top3`        Force Top-N to 3 regardless of `--topn`
+- `--no-eval`          Disable evaluation (enabled by default)
+- `--relevance`        Rating threshold for relevant items in evaluation (default: 4.0)
+
+Category Top-Genres and Boost (optional)
+- `--cat-genre-boost`  Additive boost for items matching selected top genres (default: 0.0 disabled)
+- `--cat-topk-genres`  K for selecting top genres (default: 3)
+- `--cat-genre-mode`   How to select top genres: `combined` (avg profile) or `union` (per-dimension union)
+
+Display and Explainability
+- `--recs-table` / `--no-recs-table`  Enable/disable tabular recommendations (default: enabled)
+- `--recs-show-components`            Include SVD/Content/Category/Boost columns
+- `--recs-show-confidence`            Show confidence hint (e.g., `[###--] 3.5`)
+- `--badges-demographics`             Show compact demographic badges (default: enabled)
+- `--show-per-dim-top-genres`         Also print per-dimension top genres (off by default)
+- `--show-matched-genres` / `--no-show-matched-genres`  Show/hide Matched Genres badges (default: show)
+- `--recs-max-genres`                 Max number of matched genres to display per item (default: 2)
+
+Model Tuning and Persistence
+- `--tune-svd`     Run GridSearchCV over SVD hyperparameters (3-fold RMSE)
+- `--save-model`   Save the trained SVD model to `artifacts/svd_model.dump` (by default)
+- `--load-model`   Load a previously saved SVD model (skips training if found)
+- `--model-dir`    Directory for model artifacts (default: `artifacts`)
+- `--model-file`   Filename for the SVD model artifact (default: `svd_model.dump`)
 
 ### Example Commands
 
-**Basic usage with default settings:**
+**Basic usage with default settings (tabular view, concise demographics, matched genres):**
 ```bash
 python "Movie recommender.py"
 ```
@@ -157,6 +187,21 @@ python "Movie recommender.py" --svd-weight 0.8 --content-weight 0.2
 **Run without evaluation (faster):**
 ```bash
 python "Movie recommender.py" --no-eval
+```
+
+**Show full explainable table (components and confidence):**
+```bash
+python "Movie recommender.py" --recs-show-components --recs-show-confidence
+```
+
+**Enable top-genre boost and union of per-dimension top-K:**
+```bash
+python "Movie recommender.py" --cat-genre-boost 0.1 --cat-genre-mode union --cat-topk-genres 3
+```
+
+**Only recommend Top 3 always:**
+```bash
+python "Movie recommender.py" --only-top3
 ```
 
 **Tune hyperparameters and save model:**
@@ -177,7 +222,8 @@ The recommendation pipeline consists of:
 2. **Feature Engineering:** Compute user profile vectors by averaging rated movie genres
 3. **Model Training:** Train SVD on the user-item rating matrix (collaborative filtering)
 4. **Content Similarity:** Calculate cosine similarity between user profiles and movie features
-5. **Hybrid Scoring:** Combine SVD predictions and content scores with configurable weights
+5. **Category Profiles:** Compute demographic group profiles (age-group, gender, occupation) and similarity to items
+6. **Hybrid Scoring:** Combine SVD, content, and category signals with optional top-genre boost
 6. **Evaluation:** Assess performance on test set using multiple metrics
 
 ## Testing
