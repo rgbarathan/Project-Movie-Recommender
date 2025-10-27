@@ -336,7 +336,11 @@ def main():
         age_group = demo.get('age_group', 'NA')
         gender = demo.get('gender', 'NA')
         occupation = demo.get('occupation', 'NA')
-        print(f"\nTop {args.topn} movie recommendations for User {user} (Age: {age}, Age Group: {age_group}, Gender: {gender}, Occupation: {occupation}):")
+        if getattr(args, 'badges_demographics', False):
+            # Compact header when badges are enabled
+            print(f"\nTop {args.topn} movie recommendations for User {user}:")
+        else:
+            print(f"\nTop {args.topn} movie recommendations for User {user} (Age: {age}, Age Group: {age_group}, Gender: {gender}, Occupation: {occupation}):")
         if getattr(args, 'badges_demographics', False):
             # Compact badges under the header
             badge_age_group = age_group if age_group != 'NA' else '?'
@@ -400,15 +404,15 @@ def main():
                         rows.append([str(rank), title, f"{score:.2f}", ', '.join(matched_names)])
 
             if getattr(args, 'recs_show_components', False):
-                headers = ['#', 'Title', 'Score', 'SVD', 'Content', 'Category', 'Boost']
+                headers = ['#', 'Title', 'Rating', 'SVD', 'Content', 'Category', 'Boost']
                 if getattr(args, 'recs_show_confidence', False):
                     headers.append('Conf')
                 headers.append('Matched Genres')
             else:
                 if getattr(args, 'recs_show_confidence', False):
-                    headers = ['#', 'Title', 'Score', 'Conf', 'Matched Genres']
+                    headers = ['#', 'Title', 'Rating', 'Conf', 'Matched Genres']
                 else:
-                    headers = ['#', 'Title', 'Score', 'Matched Genres']
+                    headers = ['#', 'Title', 'Rating', 'Matched Genres']
 
             # Compute column widths
             col_widths = [len(h) for h in headers]
