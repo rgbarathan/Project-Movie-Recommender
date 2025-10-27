@@ -47,11 +47,14 @@ def main():
     parser.add_argument('--model-dir', default='artifacts', help='Directory to save/load model artifacts (default: artifacts)')
     parser.add_argument('--model-file', default='svd_model.dump', help='Filename for the saved SVD model artifact')
     # Recommendation display formatting
-    parser.add_argument('--recs-table', action='store_true', help='Display recommendations in a tabular view')
+    parser.add_argument('--recs-table', action='store_true', help='Display recommendations in a tabular view (default: enabled)')
+    parser.add_argument('--no-recs-table', dest='recs_table', action='store_false', help='Disable tabular recommendations view')
     parser.add_argument('--recs-show-components', action='store_true', help='Include SVD/Content/Category/Boost columns in the table')
     parser.add_argument('--recs-max-genres', type=int, default=2, help='Max number of matched genres to display per item (default: 2)')
     parser.add_argument('--recs-show-confidence', action='store_true', help='Show confidence hint for each recommendation (e.g., [####-] 4.2)')
     parser.add_argument('--badges-demographics', action='store_true', help='Print compact demographic badges like [25-34] [M] [programmer]')
+    # Enable table view by default; can be turned off with --no-recs-table
+    parser.set_defaults(recs_table=True)
     args = parser.parse_args()
 
     data_dir = args.data_dir
