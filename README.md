@@ -79,8 +79,27 @@ python "Movie recommender.py"
 - `--users`          List of user IDs to recommend for (default `2 10 30`)
 - `--topn`           Number of recommendations per user (default 5)
 - `--no-eval`        Disable evaluation
+ - `--tune-svd`      Run a quick GridSearchCV over SVD hyperparameters (3-fold RMSE)
+ - `--save-model`    Save the trained SVD model to `artifacts/svd_model.dump` (by default)
+ - `--load-model`    Load a previously saved SVD model (skips training if found)
+ - `--model-dir`     Directory for model artifacts (default `artifacts`)
+ - `--model-file`    Filename for the SVD model artifact (default `svd_model.dump`)
 
 ## Notes
 - Dependencies are pinned in `requirements.txt` for reproducibility and binary compatibility (e.g., Surprise with NumPy).
 - Dataset files from MovieLens (`u.data`, `u.item`, etc.) must be in the `ml-100k/` folder adjacent to the script.
 - Windows only: If package installation fails for compiled extensions, ensure you have recent Microsoft C++ Build Tools installed, or use a supported Python version as pinned here.
+
+### Examples
+
+Train with tuning and save the model (macOS/Linux):
+
+```bash
+python "Movie recommender.py" --tune-svd --save-model --no-eval
+```
+
+Load a saved model and generate recommendations (Windows PowerShell):
+
+```powershell
+python "Movie recommender.py" --load-model --users 1 50 100 --topn 5 --no-eval
+```

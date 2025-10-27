@@ -2,7 +2,8 @@
 import os
 import pandas as pd
 from surprise import Dataset, Reader, SVD
-from surprise.model_selection import train_test_split
+from surprise.model_selection import train_test_split, GridSearchCV
+from surprise import dump as svd_dump
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.linear_model import LinearRegression
 import numpy as np
@@ -31,6 +32,12 @@ def main():
     parser.add_argument('--data-dir', default='ml-100k', help='Path to MovieLens data directory')
     parser.add_argument('--no-eval', dest='evaluate', action='store_false', help='Disable evaluation (evaluation runs by default)')
     parser.add_argument('--relevance', type=float, default=4.0, help='Rating threshold to mark an item as relevant for ranking metrics')
+    # Model tuning and persistence
+    parser.add_argument('--tune-svd', action='store_true', help='Run GridSearchCV to tune SVD hyperparameters')
+    parser.add_argument('--save-model', action='store_true', help='Save trained SVD model artifact to disk')
+    parser.add_argument('--load-model', action='store_true', help='Load SVD model artifact from disk (skips training if found)')
+    parser.add_argument('--model-dir', default='artifacts', help='Directory to save/load model artifacts (default: artifacts)')
+    parser.add_argument('--model-file', default='svd_model.dump', help='Filename for the saved SVD model artifact')
     args = parser.parse_args()
 
     data_dir = args.data_dir
@@ -60,8 +67,45 @@ def main():
     movie_feature_cols = movie_feature_matrix.columns.tolist()
     data = Dataset.load_from_df(ratings[['user_id', 'movie_id', 'rating']], reader)
     trainset, testset = train_test_split(data, test_size=0.2, random_state=42)
-    svd_model = SVD(random_state=42)
-    svd_model.fit(trainset)
+
+    # Prepare model IO paths
+    os.makedirs(args.model_dir, exist_ok=True)
+    model_path = os.path.join(args.model_dir, args.model_file)
+
+    svd_model = None
+    # Try loading model if requested
+    if args.load_model and os.path.exists(model_path):
+        try:
+            _, svd_model = svd_dump.load(model_path)
+            print(f"Loaded SVD model from: {model_path}")
+        except Exception as e:
+            print(f"Failed to load model from {model_path}: {e}. Will train a new model.")
+
+    # Train model (with optional tuning) if not loaded
+    if svd_model is None:
+        if args.tune_svd:
+            print("Tuning SVD hyperparameters with GridSearchCV (rmse, 3-fold)...")
+            param_grid = {
+                'n_factors': [50, 100],
+                'n_epochs': [20, 30],
+                'lr_all': [0.002, 0.005],
+                'reg_all': [0.02, 0.1],
+            }
+            gs = GridSearchCV(SVD, param_grid, measures=['rmse'], cv=3, joblib_verbose=0)
+            gs.fit(data)
+            best_params = gs.best_params['rmse']
+            print(f"Best SVD params (rmse): {best_params}")
+            svd_model = SVD(random_state=42, **best_params)
+        else:
+            svd_model = SVD(random_state=42)
+
+        svd_model.fit(trainset)
+        if args.save_model:
+            try:
+                svd_dump.dump(model_path, algo=svd_model)
+                print(f"Saved SVD model to: {model_path}")
+            except Exception as e:
+                print(f"Failed to save model to {model_path}: {e}")
 
     # Step 5: Content-based filtering
     user_movie_matrix = ratings.merge(user_features, on='user_id').merge(movie_features, on='movie_id')
