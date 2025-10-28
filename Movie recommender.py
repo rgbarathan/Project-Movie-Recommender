@@ -2,11 +2,10 @@
 import os
 import pandas as pd
 from surprise import Dataset, Reader, SVD
-from surprise import SVDpp, KNNBaseline, BaselineOnly, KNNWithMeans, NMF
 from surprise.model_selection import train_test_split, GridSearchCV
 from surprise import dump as svd_dump
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.linear_model import LinearRegression
 import numpy as np
 import argparse
 import sys
@@ -25,9 +24,7 @@ def ensure_data_files(data_dir):
 
 def main():
     parser = argparse.ArgumentParser(description='Hybrid recommender mixing SVD and content similarity')
-    # Algorithm selection and comparison
-    parser.add_argument('--algo', type=str, default='svd', choices=['svd', 'svdpp', 'knn', 'baseline', 'knnmeans', 'nmf'], help='Base CF algorithm: svd (default), svdpp, knn (KNNBaseline), baseline (BaselineOnly), knnmeans (KNNWithMeans), nmf')
-    parser.add_argument('--svd-weight', type=float, default=0.6, help='Weight for SVD prediction (default: 0.6)')
+    parser.add_argument('--svd-weight', type=float, default=0.7, help='Weight for SVD prediction (default: 0.7)')
     parser.add_argument('--content-weight', type=float, default=None, help='Weight for content similarity (default: 1 - svd_weight - category_weight)')
     parser.add_argument('--normalize-sim', action='store_true', help='Normalize cosine similarity to rating scale [1,5] before mixing')
     parser.add_argument('--learn-sim', action='store_true', help='Learn a linear mapping from cosine similarity -> rating using train data')
@@ -44,18 +41,12 @@ def main():
     parser.add_argument('--cat-topk-genres', type=int, default=3, help='K for top category genres used in printing and boosting (default: 3)')
     parser.add_argument('--cat-genre-mode', type=str, default='combined', choices=['combined', 'union'], help='How to select top genres across dimensions: combined (avg profile) or union of per-dim top-K (default: combined)')
     # Model tuning and persistence
-    parser.add_argument('--tune-svd', action='store_true', help='Run GridSearchCV to tune SVD hyperparameters with expanded grid')
-    parser.add_argument('--tune-svdpp', action='store_true', help='Run GridSearchCV to tune SVD++ hyperparameters')
-    parser.add_argument('--tune-knn', action='store_true', help='Run GridSearchCV to tune KNNBaseline hyperparameters')
-    parser.add_argument('--tune-cv', type=int, default=5, help='Number of CV folds for tuning (default: 5)')
+    parser.add_argument('--tune-svd', action='store_true', help='Run GridSearchCV to tune SVD hyperparameters')
     parser.add_argument('--save-model', action='store_true', help='Save trained SVD model artifact to disk')
     parser.add_argument('--load-model', action='store_true', help='Load SVD model artifact from disk (skips training if found)')
     parser.add_argument('--model-dir', default='artifacts', help='Directory to save/load model artifacts (default: artifacts)')
     parser.add_argument('--model-file', default='svd_model.dump', help='Filename for the saved SVD model artifact')
-    parser.add_argument('--compare-algos', action='store_true', help='Train and compare multiple algorithms (SVD, SVD++, KNNBaseline, BaselineOnly, KNNWithMeans, NMF) on RMSE/MAE')
-    parser.add_argument('--calibrate-preds', action='store_true', help='Apply post-hoc linear calibration to predictions to reduce bias')
-    parser.add_argument('--blend-models', type=str, default=None, help='Comma-separated list of models to ensemble blend (e.g., svdpp,knn)')
-    parser.add_argument('--learn-blend-weights', action='store_true', help='Learn optimal blend weights via ridge regression on validation split')
+    
     # Recommendation display formatting
     parser.add_argument('--recs-table', action='store_true', help='Display recommendations in a tabular view (default: enabled)')
     parser.add_argument('--no-recs-table', dest='recs_table', action='store_false', help='Disable tabular recommendations view')
@@ -143,12 +134,9 @@ def main():
 
     # Prepare model IO paths
     os.makedirs(args.model_dir, exist_ok=True)
-    # Auto-adjust model filename for non-SVD algorithms
-    if args.model_file == 'svd_model.dump' and getattr(args, 'algo', 'svd') != 'svd':
-        args.model_file = f"{args.algo}_model.dump"
     model_path = os.path.join(args.model_dir, args.model_file)
 
-    svd_model = None  # holds selected algo model instance
+    svd_model = None  # holds SVD model instance
     # Try loading model if requested
     if args.load_model and os.path.exists(model_path):
         try:
@@ -159,81 +147,24 @@ def main():
 
     # Train model (with optional tuning) if not loaded
     if svd_model is None:
-        algo_choice = getattr(args, 'algo', 'svd')
-        
-        if algo_choice == 'svd':
-            if args.tune_svd:
-                print(f"Tuning SVD hyperparameters with GridSearchCV (rmse+mae, {args.tune_cv}-fold)...")
-                param_grid = {
-                    'n_factors': [50, 100, 150, 200],
-                    'n_epochs': [20, 30, 40],
-                    'lr_all': [0.002, 0.005, 0.007],
-                    'reg_all': [0.01, 0.02, 0.05, 0.08],
-                }
-                gs = GridSearchCV(SVD, param_grid, measures=['rmse', 'mae'], cv=args.tune_cv, joblib_verbose=0)
-                gs.fit(data)
-                best_params = gs.best_params['rmse']
-                print(f"Best SVD params (rmse): {best_params}")
-                print(f"Best RMSE: {gs.best_score['rmse']:.4f}, Best MAE: {gs.best_score['mae']:.4f}")
-                svd_model = SVD(random_state=42, **best_params)
-            else:
-                svd_model = SVD(random_state=42, n_factors=100, n_epochs=30, lr_all=0.005, reg_all=0.02)
-                
-        elif algo_choice == 'svdpp':
-            if args.tune_svdpp:
-                print(f"Tuning SVD++ hyperparameters with GridSearchCV (rmse+mae, {args.tune_cv}-fold)...")
-                param_grid = {
-                    'n_factors': [50, 100, 150],
-                    'n_epochs': [20, 30, 40],
-                    'lr_all': [0.002, 0.005, 0.007],
-                    'reg_all': [0.02, 0.05, 0.08],
-                }
-                gs = GridSearchCV(SVDpp, param_grid, measures=['rmse', 'mae'], cv=args.tune_cv, joblib_verbose=0)
-                gs.fit(data)
-                best_params = gs.best_params['rmse']
-                print(f"Best SVD++ params (rmse): {best_params}")
-                print(f"Best RMSE: {gs.best_score['rmse']:.4f}, Best MAE: {gs.best_score['mae']:.4f}")
-                svd_model = SVDpp(random_state=42, **best_params)
-            else:
-                svd_model = SVDpp(random_state=42, n_factors=100, n_epochs=20, lr_all=0.005, reg_all=0.02)
-                
-        elif algo_choice == 'knn':
-            if args.tune_knn:
-                print(f"Tuning KNNBaseline hyperparameters with GridSearchCV (rmse+mae, {args.tune_cv}-fold)...")
-                param_grid = {
-                    'k': [20, 40, 80],
-                    'min_k': [1, 3, 5],
-                    'sim_options': {
-                        'name': ['pearson_baseline', 'cosine'],
-                        'user_based': [False],
-                        'min_support': [1, 3, 5],
-                    }
-                }
-                gs = GridSearchCV(KNNBaseline, param_grid, measures=['rmse', 'mae'], cv=args.tune_cv, joblib_verbose=0)
-                gs.fit(data)
-                best_params = gs.best_params['rmse']
-                print(f"Best KNNBaseline params (rmse): {best_params}")
-                print(f"Best RMSE: {gs.best_score['rmse']:.4f}, Best MAE: {gs.best_score['mae']:.4f}")
-                svd_model = KNNBaseline(**best_params)
-            else:
-                sim_options = {'name': 'pearson_baseline', 'user_based': False, 'min_support': 3}
-                svd_model = KNNBaseline(k=40, min_k=3, sim_options=sim_options)
-                
-        elif algo_choice == 'baseline':
-            bsl_options = {'method': 'als', 'n_epochs': 20, 'reg_u': 10, 'reg_i': 10}
-            svd_model = BaselineOnly(bsl_options=bsl_options)
-            
-        elif algo_choice == 'knnmeans':
-            sim_options = {'name': 'pearson', 'user_based': False}
-            svd_model = KNNWithMeans(k=40, sim_options=sim_options)
-            
-        elif algo_choice == 'nmf':
-            svd_model = NMF(n_factors=100, n_epochs=50, random_state=42)
-            
+        if args.tune_svd:
+            print("Tuning SVD hyperparameters with GridSearchCV (rmse, 3-fold)...")
+            param_grid = {
+                'n_factors': [50, 100, 150],
+                'n_epochs': [20, 30, 40],
+                'lr_all': [0.002, 0.005, 0.007],
+                'reg_all': [0.01, 0.02, 0.05],
+            }
+            gs = GridSearchCV(SVD, param_grid, measures=['rmse'], cv=3, joblib_verbose=0)
+            gs.fit(data)
+            best_params = gs.best_params['rmse']
+            print(f"Best SVD params (rmse): {best_params}")
+            print(f"Best RMSE: {gs.best_score['rmse']:.4f}")
+            svd_model = SVD(random_state=42, **best_params)
         else:
             svd_model = SVD(random_state=42, n_factors=100, n_epochs=30, lr_all=0.005, reg_all=0.02)
 
-        print(f"Training {algo_choice.upper()} model...")
+        print("Training SVD model...")
         svd_model.fit(trainset)
         if args.save_model:
             try:
@@ -241,105 +172,9 @@ def main():
                 print(f"Saved model to: {model_path}")
             except Exception as e:
                 print(f"Failed to save model to {model_path}: {e}")
-
-    # Optional: algorithm comparison (RMSE/MAE) on the same split
-    if getattr(args, 'compare_algos', False):
-        print("\n" + "="*60)
-        print("ALGORITHM COMPARISON (same train/test split)")
-        print("="*60)
-        
-        def eval_model(model, label):
-            model.fit(trainset)
-            preds = model.test(testset)
-            r = accuracy.rmse(preds, verbose=False)
-            m = accuracy.mae(preds, verbose=False)
-            return label, r, m
-
-        comparisons = []
-        
-        # SVD with improved defaults
-        model_svd = SVD(random_state=42, n_factors=100, n_epochs=30, lr_all=0.005, reg_all=0.02)
-        comparisons.append(eval_model(model_svd, 'SVD'))
-
-        # SVD++
-        model_svdpp = SVDpp(random_state=42, n_factors=100, n_epochs=20, lr_all=0.005, reg_all=0.02)
-        comparisons.append(eval_model(model_svdpp, 'SVD++'))
-
-        # KNNBaseline
-        sim_options_cmp = {'name': 'pearson_baseline', 'user_based': False, 'min_support': 3}
-        model_knn = KNNBaseline(k=40, min_k=3, sim_options=sim_options_cmp)
-        comparisons.append(eval_model(model_knn, 'KNNBaseline'))
-        
-        # BaselineOnly
-        bsl_options_cmp = {'method': 'als', 'n_epochs': 20, 'reg_u': 10, 'reg_i': 10}
-        model_baseline = BaselineOnly(bsl_options=bsl_options_cmp)
-        comparisons.append(eval_model(model_baseline, 'BaselineOnly'))
-        
-        # KNNWithMeans
-        sim_options_means = {'name': 'pearson', 'user_based': False}
-        model_knnmeans = KNNWithMeans(k=40, sim_options=sim_options_means)
-        comparisons.append(eval_model(model_knnmeans, 'KNNWithMeans'))
-        
-        # NMF
-        model_nmf = NMF(n_factors=100, n_epochs=50, random_state=42)
-        comparisons.append(eval_model(model_nmf, 'NMF'))
-
-        # Print comparison table
-        print("\nAlgorithm RMSE/MAE Comparison:")
-        headers = ['Model', 'RMSE', 'MAE', 'Improvement vs SVD']
-        rows = []
-        svd_rmse = comparisons[0][1]
-        for (lbl, rm, mae) in comparisons:
-            improvement = f"{svd_rmse - rm:+.4f}" if lbl != 'SVD' else '-'
-            rows.append([lbl, f"{rm:.4f}", f"{mae:.4f}", improvement])
-        
-        col_widths = [len(h) for h in headers]
-        for row in rows:
-            for i, cell in enumerate(row):
-                col_widths[i] = max(col_widths[i], len(str(cell)))
-        
-        def print_row(cols):
-            print('  ' + ' | '.join(str(c).ljust(col_widths[i]) for i, c in enumerate(cols)))
-        def print_sep():
-            print('  ' + '-+-'.join('-' * w for w in col_widths))
-        
-        print_row(headers)
-        print_sep()
-        for r in rows:
-            print_row(r)
-        
-        print("\n" + "="*60)
-        print(f"Best algorithm: {min(comparisons, key=lambda x: x[1])[0]} (RMSE: {min(comparisons, key=lambda x: x[1])[1]:.4f})")
-        print("="*60 + "\n")
-
-    # Prediction calibration setup (if requested)
+    
+    # No prediction calibration in SVD-only mode
     calibrator = None
-    if getattr(args, 'calibrate_preds', False):
-        print("Learning post-hoc prediction calibration on validation split...")
-        # Split trainset further for calibration
-        cal_data = Dataset.load_from_df(ratings[['user_id', 'movie_id', 'rating']], reader)
-        cal_trainset, cal_valset = train_test_split(cal_data, test_size=0.15, random_state=43)
-        
-        # Train a temporary model on cal_trainset
-        if isinstance(svd_model, SVD):
-            cal_model = SVD(random_state=42, n_factors=100, n_epochs=30, lr_all=0.005, reg_all=0.02)
-        elif isinstance(svd_model, SVDpp):
-            cal_model = SVDpp(random_state=42, n_factors=100, n_epochs=20, lr_all=0.005, reg_all=0.02)
-        else:
-            cal_model = svd_model  # reuse if not SVD/SVD++
-        
-        if not isinstance(svd_model, (BaselineOnly, KNNBaseline, KNNWithMeans, NMF)):
-            cal_model.fit(cal_trainset)
-        
-        # Collect predictions and true ratings on validation
-        cal_preds = cal_model.test(cal_valset)
-        est_vals = np.array([p.est for p in cal_preds]).reshape(-1, 1)
-        true_vals = np.array([p.r_ui for p in cal_preds])
-        
-        # Fit linear calibrator
-        calibrator = LinearRegression()
-        calibrator.fit(est_vals, true_vals)
-        print(f"Calibration: rating ≈ {calibrator.coef_[0]:.4f} * prediction + {calibrator.intercept_:.4f}")
 
 
     # Step 5: Content-based filtering
@@ -644,9 +479,7 @@ def main():
         
         rmse = accuracy.rmse(preds, verbose=False)
         mae = accuracy.mae(preds, verbose=False)
-        algo_label = {'svd': 'SVD', 'svdpp': 'SVD++', 'knn': 'KNNBaseline', 'baseline': 'BaselineOnly', 'knnmeans': 'KNNWithMeans', 'nmf': 'NMF'}.get(getattr(args, 'algo', 'svd'), 'SVD')
-        cal_suffix = " (calibrated)" if calibrator is not None else ""
-        print(f"\n{algo_label} evaluation{cal_suffix} -> RMSE: {rmse:.4f}, MAE: {mae:.4f}")
+        print(f"\nSVD evaluation -> RMSE: {rmse:.4f}, MAE: {mae:.4f}")
 
         # Build ground-truth (relevant items per user) from testset using relevance threshold
         gt = defaultdict(set)
@@ -806,7 +639,7 @@ def main():
             # Tabular comparison between selected Algo and Hybrid
             print('\nEvaluation results (averaged over users sample):')
             metrics_order = ['precision', 'recall', 'ndcg', 'hitrate', 'coverage', 'ild']
-            headers = ['Metric', algo_label, 'Hybrid', 'Delta']
+            headers = ['Metric', 'SVD', 'Hybrid', 'Delta']
             rows = []
             for k in metrics_order:
                 s = float(svd_metrics.get(k, float('nan')))
