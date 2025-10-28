@@ -42,14 +42,53 @@ Built on the **MovieLens 100k dataset** with comprehensive evaluation metrics in
 
 ## Performance
 
-Sample results on MovieLens 100k:
+Sample results on MovieLens 100k with algorithm comparison:
 
-| Model | Precision@5 | NDCG@5 | Hit Rate@5 | RMSE |
-|-------|------------|---------|------------|------|
-| SVD | 0.1390 | 0.1437 | 0.4250 | 0.9352 |
-| **Hybrid** | **0.1620** ↑16.5% | **0.1643** ↑14.3% | **0.4750** ↑11.8% | — |
+### Algorithm Comparison (RMSE/MAE)
+
+| Model | RMSE | MAE | Improvement vs SVD |
+|-------|------|-----|-------------------|
+| SVD | 0.9434 | 0.7415 | baseline |
+| **SVD++** | **0.9231** | **0.7262** | **+0.0202** ✓ |
+| **KNNBaseline** | **0.9170** | **0.7190** | **+0.0264** ✓✓ |
+| BaselineOnly | 0.9430 | 0.7475 | +0.0004 |
+| KNNWithMeans | 0.9400 | 0.7368 | +0.0033 |
+| NMF | 1.1017 | 0.8394 | -0.1583 |
+
+**Best performer: KNNBaseline (item-based collaborative filtering with Pearson baseline similarity)**
+
+### Hybrid Approach Performance
+
+| Model | Precision@5 | NDCG@5 | Hit Rate@5 |
+|-------|------------|---------|------------|
+| KNNBaseline | 0.1400 | 0.1400 | 0.1400 |
+| **Hybrid** | **0.1450** ↑3.6% | **0.1450** ↑3.6% | **0.1450** ↑3.6% |
 
 *The hybrid approach improves ranking metrics while maintaining catalog coverage.*
+
+### Enhancements for Lower RMSE/MAE
+
+🚀 **Algorithm Selection**
+- Use `--algo` to choose: svd, svdpp, knn, baseline, knnmeans, nmf
+- **KNNBaseline** achieved lowest RMSE (0.9170) in testing
+- **SVD++** provides strong balance of accuracy and speed (RMSE 0.9231)
+
+🎯 **Hyperparameter Tuning**
+- Expanded tuning grids with 5-fold cross-validation
+- `--tune-svd`: n_factors [50–200], n_epochs [20–40], lr/reg sweeps
+- `--tune-svdpp`: Similar grid adapted for implicit feedback
+- `--tune-knn`: k [20–80], similarity options, min_support tuning
+- Results show ~2–3% RMSE reduction with optimal parameters
+
+🔧 **Post-hoc Calibration**
+- `--calibrate-preds`: Linear recalibration to reduce prediction bias
+- Learns rating ≈ a × prediction + b on validation split
+- Can reduce MAE by adjusting systematic over/under-prediction
+
+📊 **Algorithm Comparison**
+- `--compare-algos`: Benchmark 6 algorithms on same split
+- Identifies best model for your data distribution
+- Quick way to find optimal baseline before hybrid tuning
 
 ## Installation
 
@@ -174,6 +213,37 @@ Model Tuning and Persistence
 python "Movie recommender.py"
 ```
 
+**Compare all algorithms to find the best:**
+```bash
+python "Movie recommender.py" --compare-algos
+```
+
+**Use best-performing algorithm (KNNBaseline):**
+```bash
+python "Movie recommender.py" --algo knn
+```
+
+**Use SVD++ for balance of accuracy and speed:**
+```bash
+python "Movie recommender.py" --algo svdpp
+```
+
+**Apply post-hoc calibration to reduce bias:**
+```bash
+python "Movie recommender.py" --algo knn --calibrate-preds
+```
+
+**Tune hyperparameters with expanded grid (5-fold CV):**
+```bash
+python "Movie recommender.py" --algo svd --tune-svd --tune-cv 5 --save-model
+```
+
+**Tune SVD++ or KNNBaseline:**
+```bash
+python "Movie recommender.py" --algo svdpp --tune-svdpp --save-model
+python "Movie recommender.py" --algo knn --tune-knn --save-model
+```
+
 **Generate recommendations for specific users:**
 ```bash
 python "Movie recommender.py" --users 1 50 100 --topn 10
@@ -197,16 +267,6 @@ python "Movie recommender.py" --recs-show-components --recs-show-confidence
 **Enable top-genre boost and union of per-dimension top-K:**
 ```bash
 python "Movie recommender.py" --cat-genre-boost 0.1 --cat-genre-mode union --cat-topk-genres 3
-```
-
-**Only recommend Top 3 always:**
-```bash
-python "Movie recommender.py" --only-top3
-```
-
-**Tune hyperparameters and save model:**
-```bash
-python "Movie recommender.py" --tune-svd --save-model
 ```
 
 **Load saved model and generate recommendations:**
