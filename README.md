@@ -21,7 +21,7 @@ Built on the **MovieLens 100k dataset** with comprehensive evaluation metrics in
 - Weighted blend of collaborative and content-based signals
 - Demographic-aware category blending (age, gender, occupation)
 - Optional learned similarity-to-rating mapping
-- Hyperparameter tuning with GridSearchCV
+- SVD hyperparameter tuning with GridSearchCV (3-fold)
 
 📊 **Comprehensive Evaluation**
 - Rating prediction: RMSE, MAE
@@ -42,53 +42,25 @@ Built on the **MovieLens 100k dataset** with comprehensive evaluation metrics in
 
 ## Performance
 
-Sample results on MovieLens 100k with algorithm comparison:
+Sample results on MovieLens 100k (SVD-only base model):
 
-### Algorithm Comparison (RMSE/MAE)
+### Rating Prediction
 
-| Model | RMSE | MAE | Improvement vs SVD |
-|-------|------|-----|-------------------|
-| SVD | 0.9434 | 0.7415 | baseline |
-| **SVD++** | **0.9231** | **0.7262** | **+0.0202** ✓ |
-| **KNNBaseline** | **0.9170** | **0.7190** | **+0.0264** ✓✓ |
-| BaselineOnly | 0.9430 | 0.7475 | +0.0004 |
-| KNNWithMeans | 0.9400 | 0.7368 | +0.0033 |
-| NMF | 1.1017 | 0.8394 | -0.1583 |
+- SVD RMSE: 0.9434
+- SVD MAE: 0.7415
 
-**Best performer: KNNBaseline (item-based collaborative filtering with Pearson baseline similarity)**
+### Hybrid Approach Performance (SVD vs Hybrid)
 
-### Hybrid Approach Performance
+| Metric | SVD | Hybrid | Delta |
+|--------|-----|--------|-------|
+| Precision@3 | 0.1417 | 0.1533 | +0.0117 |
+| Recall@3    | 0.0180 | 0.0202 | +0.0022 |
+| NDCG@3      | 0.1408 | 0.1547 | +0.0139 |
+| HitRate@3   | 0.3200 | 0.3500 | +0.0300 |
+| Coverage    | 0.0916 | 0.0850 | -0.0065 |
+| ILD         | 0.7177 | 0.5656 | -0.1522 |
 
-| Model | Precision@5 | NDCG@5 | Hit Rate@5 |
-|-------|------------|---------|------------|
-| KNNBaseline | 0.1400 | 0.1400 | 0.1400 |
-| **Hybrid** | **0.1450** ↑3.6% | **0.1450** ↑3.6% | **0.1450** ↑3.6% |
-
-*The hybrid approach improves ranking metrics while maintaining catalog coverage.*
-
-### Enhancements for Lower RMSE/MAE
-
-🚀 **Algorithm Selection**
-- Use `--algo` to choose: svd, svdpp, knn, baseline, knnmeans, nmf
-- **KNNBaseline** achieved lowest RMSE (0.9170) in testing
-- **SVD++** provides strong balance of accuracy and speed (RMSE 0.9231)
-
-🎯 **Hyperparameter Tuning**
-- Expanded tuning grids with 5-fold cross-validation
-- `--tune-svd`: n_factors [50–200], n_epochs [20–40], lr/reg sweeps
-- `--tune-svdpp`: Similar grid adapted for implicit feedback
-- `--tune-knn`: k [20–80], similarity options, min_support tuning
-- Results show ~2–3% RMSE reduction with optimal parameters
-
-🔧 **Post-hoc Calibration**
-- `--calibrate-preds`: Linear recalibration to reduce prediction bias
-- Learns rating ≈ a × prediction + b on validation split
-- Can reduce MAE by adjusting systematic over/under-prediction
-
-📊 **Algorithm Comparison**
-- `--compare-algos`: Benchmark 6 algorithms on same split
-- Identifies best model for your data distribution
-- Quick way to find optimal baseline before hybrid tuning
+Notes: Hybrid boosts ranking quality with a small trade-off in coverage/diversity depending on weights.
 
 ## Installation
 
@@ -200,7 +172,7 @@ Display and Explainability
 - `--recs-max-genres`                 Max number of matched genres to display per item (default: 2)
 
 Model Tuning and Persistence
-- `--tune-svd`     Run GridSearchCV over SVD hyperparameters (3-fold RMSE)
+- `--tune-svd`     Run GridSearchCV over SVD hyperparameters (fixed 3-fold RMSE)
 - `--save-model`   Save the trained SVD model to `artifacts/svd_model.dump` (by default)
 - `--load-model`   Load a previously saved SVD model (skips training if found)
 - `--model-dir`    Directory for model artifacts (default: `artifacts`)
@@ -213,35 +185,9 @@ Model Tuning and Persistence
 python "Movie recommender.py"
 ```
 
-**Compare all algorithms to find the best:**
+**Tune SVD hyperparameters (3-fold CV) and save model:**
 ```bash
-python "Movie recommender.py" --compare-algos
-```
-
-**Use best-performing algorithm (KNNBaseline):**
-```bash
-python "Movie recommender.py" --algo knn
-```
-
-**Use SVD++ for balance of accuracy and speed:**
-```bash
-python "Movie recommender.py" --algo svdpp
-```
-
-**Apply post-hoc calibration to reduce bias:**
-```bash
-python "Movie recommender.py" --algo knn --calibrate-preds
-```
-
-**Tune hyperparameters with expanded grid (5-fold CV):**
-```bash
-python "Movie recommender.py" --algo svd --tune-svd --tune-cv 5 --save-model
-```
-
-**Tune SVD++ or KNNBaseline:**
-```bash
-python "Movie recommender.py" --algo svdpp --tune-svdpp --save-model
-python "Movie recommender.py" --algo knn --tune-knn --save-model
+python "Movie recommender.py" --tune-svd --save-model
 ```
 
 **Generate recommendations for specific users:**
